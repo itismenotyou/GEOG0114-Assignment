@@ -1,0 +1,311 @@
+---
+title: "Test111111"
+author: "Qinke Cai"
+date: '2023-01-05'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+```{r}
+#library a bunch of packages we may (or may not) use - install them first if not installed already. 
+library(tidyverse)
+library(tmap)
+library(geojsonio)
+library(plotly)
+library(rgdal)
+library(broom)
+library(mapview)
+library(crosstalk)
+library(sf)
+library(sp)
+library(spdep)
+library(car)
+library(fs)
+library(janitor)
+```
+
+```{r}
+#look what is inside the zip
+library(fs)
+
+Londonwards<-fs::dir_info(here::here("prac7_data", 
+                                 "statistical-gis-boundaries-london", 
+                                 "ESRI"))%>%
+  #$ means exact match
+  dplyr::filter(str_detect(path, 
+                           "London_Ward_CityMerged.shp$"))%>%
+  dplyr::select(path)%>%
+  dplyr::pull()%>%
+  #read in the file in
+  sf::st_read()
+```
+
+```{r}
+#check the data
+qtm(Londonwards)
+```
+
+```{r}
+#We can use readr to deal with the issues in this dataset - which are to do with text values being stored in columns containing numeric values
+
+#read in some data - couple of things here. Read in specifying a load of likely 'n/a' values, also specify Latin1 as encoding as there is a pound sign (£) in one of the column headers - just to make things fun!
+
+LondonWardProfiles <- read_csv("https://data.london.gov.uk/download/ward-profiles-and-atlas/772d2d64-e8c6-46cb-86f9-e52b4c7851bc/ward-profiles-excel-version.csv", 
+                               na = c("", "NA", "n/a"), 
+                               locale = locale(encoding = 'Latin1'), 
+                               col_names = TRUE)
+
+LondonWardProfiles2 <- read_csv("/Users/caiqinke/Desktop/GEOG0114-Assignment/London-wards-wellbeing-2011.csv",na = c("", "NA", "n/a"), locale = locale(encoding = 'Latin1'), col_names = TRUE ) %>%
+  clean_names() %>%
+  dplyr::select(new_ward_code, gcse_point_scores_2011, public_transport_accessibility_2011)
+```
+```{r}
+# Merge datafile to wards shp uniquely by using "New code" column
+LondonWardProfiles <- merge(LondonWardProfiles, LondonWardProfiles2, by.x = "New code", by.y = "new_ward_code")
+```
+
+```{r}
+#check all of the columns have been read in correctly
+Datatypelist <- LondonWardProfiles %>% 
+  summarise_all(class) %>%
+  pivot_longer(everything(), 
+               names_to="All_variables", 
+               values_to="Variable_class")
+
+Datatypelist
+```
+
+
+```{r}
+# Use read_sf() function to load shape file 
+BOROUGHshp <- read_sf("/Users/caiqinke/Desktop/GEOG0114/Week9/Week 9 - Dataset/London Borough Areas.shp")
+```
+
+```{r}
+# Generate an empty map to visualise the spatial configuration and hierarchy of wards and Boroughs
+# First add wards layer 
+tm_shape(Londonwards) + tm_polygons() +
+# Add Borough layer on top of wards layer and make it transparent with alpha = 0
+tm_shape(BOROUGHshp) + tm_polygons(alpha = 0, border.alpha = 1, border.col = "black") +
+# Apply cosmetics by adding compass and scale
+tm_compass(position = c("right", "top")) + tm_scale_bar(position = c("left", "bottom"))
+```
+
+
+
+```{r}
+# Merge datafile to wards shp uniquely by using "GSS_CODE" column
+spatial_wards <- merge(Londonwards, LondonWardProfiles, by.x = "GSS_CODE", by.y = "New code")
+```
+
+
+
+```{r}
+plot1 <- tm_shape(spatial_wards) + tm_fill("% travel by bicycle to work - 2011", style = "quantile", n = 7, palette = "Greens") +
+tm_shape(BOROUGHshp) + tm_polygons(alpha = 0, border.alpha = 1, border.col = "black") +
+tm_text("BOROUGHN", size = "AREA") + tm_compass(position = c("right", "top")) +
+tm_scale_bar(position = c("left", "bottom")) +
+tm_layout(frame = FALSE, legend.title.size = 0.5, legend.text.size = 0.5, inner.margins = c(0.05, 0.15, 0.05, 0.05), legend.position = c(0.02, 0.2))
+
+# plot the image object
+plot1
+```
+
+```{r}
+# create 3 separate maps and store them in plot2, plot3 & plot4 objects
+# map for gcse_point_scores_2011
+plot2 <- tm_shape(spatial_wards) + tm_fill("gcse_point_scores_2011", style = "quantile", n = 7, palette = "Oranges") +
+    tm_shape(BOROUGHshp) + tm_polygons(alpha = 0, border.alpha = 1, border.col = "black") +
+    tm_text("BOROUGHN", size = "AREA") +
+    tm_compass(position = c("right", "top")) +
+    tm_scale_bar(position = c("left", "bottom")) +
+    tm_layout(frame = FALSE, legend.title.size = 0.5, legend.text.size = 0.5, inner.margins = c(0.05, 0.15, 0.05, 0.05), legend.position = c(0.02, 0.2))
+
+# map for public_transport_accessibility_2011
+plot3 <- tm_shape(spatial_wards) + tm_fill("public_transport_accessibility_2011", style = "quantile", n = 7, palette = "Reds") +
+    tm_shape(BOROUGHshp) + tm_polygons(alpha = 0, border.alpha = 1, border.col = "black") +
+    tm_text("BOROUGHN", size = "AREA") +
+    tm_compass(position = c("right", "top")) +
+    tm_scale_bar(position = c("left", "bottom")) +
+    tm_layout(frame = FALSE, legend.title.size = 0.5, legend.text.size = 0.5, inner.margins = c(0.05, 0.15, 0.05, 0.05), legend.position = c(0.02, 0.2))
+
+# map for Median Household income estimate (2012/13)
+plot4 <- tm_shape(spatial_wards) + tm_fill("Median Household income estimate (2012/13)", style = "quantile", n = 7, palette = "Reds") +
+    tm_shape(BOROUGHshp) + tm_polygons(alpha = 0, border.alpha = 1, border.col = "black") +
+    tm_text("BOROUGHN", size = "AREA") +
+    tm_compass(position = c("right", "top")) +
+    tm_scale_bar(position = c("left", "bottom")) +
+    tm_layout(frame = FALSE, legend.title.size = 0.5, legend.text.size = 0.5, inner.margins = c(0.05, 0.15, 0.05, 0.05), legend.position = c(0.02, 0.2))
+
+# stitch the maps together using tmap_arrange() function
+tmap_arrange(plot1, plot2, plot3, plot4, nrow = 2)
+```
+
+```{r}
+#run the linear regression model and store its outputs in an object called model1
+Regressiondata<- spatial_wards%>%
+  clean_names()%>%
+  dplyr::select(percent_travel_by_bicycle_to_work_2011, gcse_point_scores_2011, public_transport_accessibility_2011, median_household_income_estimate_2012_13) %>%
+  dplyr::rename(., median_household_income_estimate = median_household_income_estimate_2012_13) 
+
+#now model
+modelMLR <- Regressiondata %>%
+  lm(log(percent_travel_by_bicycle_to_work_2011) ~ log(gcse_point_scores_2011)+log(public_transport_accessibility_2011)+log(median_household_income_estimate),
+     data=.)
+
+summary(modelMLR)
+```
+
+```{r}
+library(cowplot)
+```
+
+
+```{r}
+a <- ggplot(Regressiondata, aes(x = percent_travel_by_bicycle_to_work_2011)) + 
+  geom_histogram(binwidth = 1, fill = "lightblue", colour = "black")
+
+b <- ggplot(Regressiondata, aes(x = gcse_point_scores_2011)) + 
+  geom_histogram(binwidth = 5, fill = "lightblue", colour = "black")
+
+c <- ggplot(Regressiondata, aes(x = public_transport_accessibility_2011)) + 
+  geom_histogram(binwidth = 0.3, fill = "lightblue", colour = "black")
+
+d <- ggplot(Regressiondata, aes(x = median_household_income_estimate)) + 
+  geom_histogram(binwidth = 1000, fill = "lightblue", colour = "black")
+
+plot_grid(a,b,c,d, nrow = 2)
+
+```
+
+```{r}
+Regressiondata$log_percent_travel_by_bicycle_to_work_2011 = log(Regressiondata$percent_travel_by_bicycle_to_work_2011)
+
+Regressiondata$log_gcse_point_scores_2011 = log(Regressiondata$gcse_point_scores_2011)
+
+Regressiondata$log_public_transport_accessibility_2011 = log(Regressiondata$public_transport_accessibility_2011)
+
+Regressiondata$log_median_household_income_estimate = log(Regressiondata$median_household_income_estimate)
+
+e <- ggplot(Regressiondata, aes(x = log_percent_travel_by_bicycle_to_work_2011)) + 
+  geom_histogram(binwidth = 0.1, fill = "lightblue", colour = "black")
+
+f <- ggplot(Regressiondata, aes(x = log_gcse_point_scores_2011)) + 
+  geom_histogram(binwidth = 0.01, fill = "lightblue", colour = "black")
+
+g <- ggplot(Regressiondata, aes(x = log_public_transport_accessibility_2011)) + 
+  geom_histogram(binwidth = 0.05, fill = "lightblue", colour = "black")
+
+h <- ggplot(Regressiondata, aes(x = log_median_household_income_estimate)) + 
+  geom_histogram(binwidth = 0.05, fill = "lightblue", colour = "black")
+
+plot_grid(e,f,g,h, nrow = 2)
+
+```
+
+```{r}
+# Extract residuals from "modelLMR" object and dump into "spatialdatafile" and call the column "RESIDUALS"
+spatial_wards$RESIDUALS <- modelMLR$residuals
+
+# Reporting basic summary measures to have an idea of its distribution before plotting them on map
+summary(spatial_wards$RESIDUALS)
+```
+
+```{r}
+#plot residuals
+ggplot(spatial_wards, aes(x = RESIDUALS)) + 
+  geom_histogram(binwidth = 0.05, fill = "lightblue", colour = "black")
+```
+
+```{r}
+tm_shape(spatial_wards) + tm_fill("RESIDUALS", style = "cont", midpoint = 0, palette = "-RdBu") +
+tm_shape(BOROUGHshp) + tm_polygons(alpha = 0, border.alpha = 1, border.col = "black") +
+tm_text("BOROUGHN", size = "AREA") +
+tm_compass(position = c("right", "top")) +
+tm_scale_bar(position = c("left", "bottom")) +
+tm_layout(frame = FALSE, legend.title.size = 0.5, legend.text.size = 0.5)
+```
+
+```{r}
+#generate unique number for each row
+spatial_wards$ROWNUM <- 1:nrow(spatial_wards)
+# We need to coerce the sf spatialdatafile object into a new sp object
+spatial_wards_2.0 <- as(spatial_wards, "Spatial")
+# Create spatial weights matrix for areas
+Weights <- poly2nb(spatial_wards_2.0, row.names = spatial_wards_2.0$ROWNUM)
+WeightsMatrix <- nb2mat(Weights, style='B')
+Residual_WeightMatrix <- mat2listw(WeightsMatrix , style='W')
+# Run the test on the regression model output object "modelMLR" using lm.morantest()
+lm.morantest(modelMLR, Residual_WeightMatrix, alternative="two.sided")
+```
+
+```{r}
+# Fit model using lagsarlm()
+# reuse spatial weight matrix created earlier as an object called "Residual_WeighMatrix" 
+library(spdep)
+library(spatialreg)
+modelSLY <- lagsarlm(log(percent_travel_by_bicycle_to_work_2011) ~ log(gcse_point_scores_2011)+log(public_transport_accessibility_2011)+log(median_household_income_estimate), data = Regressiondata, Residual_WeightMatrix)
+summary(modelSLY)
+```
+
+```{r}
+# extract the residuals for modelSLY object and dump back to original sf spatialdatafile object
+spatial_wards$RESID_SLY <- modelSLY$residuals
+# use Moran's I test using moran.mc() function
+moran.mc(spatial_wards$RESID_SLY, Residual_WeightMatrix, 1000, zero.policy = T)
+```
+
+```{r}
+# generate the map
+tm_shape(spatial_wards) + tm_fill("RESID_SLY", style = "cont", midpoint = 0, palette = "-RdBu") +
+    tm_shape(BOROUGHshp) + tm_polygons(alpha = 0, border.alpha = 1, border.col = "black") +
+    tm_text("BOROUGHN", size = "AREA") +
+    tm_compass(position = c("right", "top")) +
+    tm_scale_bar(position = c("left", "bottom")) +
+    tm_layout(frame = FALSE, legend.title.size = 0.5, legend.text.size = 0.5)
+```
+
+```{r}
+# Interpretation of results using impacts
+Weights_2.0 <- as(Residual_WeightMatrix, "CsparseMatrix")
+trMC <- trW(Weights_2.0, type="MC")
+summary(impacts(modelSLY, tr = trMC, R=100), zstats=TRUE)
+```
+
+```{r}
+modelSER <- errorsarlm(log(percent_travel_by_bicycle_to_work_2011) ~ log(gcse_point_scores_2011)+log(public_transport_accessibility_2011)+log(median_household_income_estimate), data = Regressiondata,Residual_WeightMatrix)
+
+summary(modelSER)
+```
+
+```{r}
+# extract the residuals for modelSLY object and dump back to original sf spatialdatafile object
+spatial_wards$RESID_SER <- modelSER$residuals
+# use Moran's I test using moran.mc() function
+moran.mc(spatial_wards$RESID_SER, Residual_WeightMatrix, 1000, zero.policy = T)
+```
+
+```{r}
+# generate the map
+tm_shape(spatial_wards) + tm_fill("RESID_SER", style = "cont", midpoint = 0, palette = "-RdBu") +
+    tm_shape(BOROUGHshp) + tm_polygons(alpha = 0, border.alpha = 1, border.col = "black") +
+    tm_text("BOROUGHN", size = "AREA") +
+    tm_compass(position = c("right", "top")) +
+    tm_scale_bar(position = c("left", "bottom")) +
+    tm_layout(frame = FALSE, legend.title.size = 0.5, legend.text.size = 0.5)
+```
