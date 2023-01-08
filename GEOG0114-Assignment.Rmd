@@ -43,8 +43,7 @@ library(janitor)
 #look what is inside the zip
 library(fs)
 
-Londonwards<-fs::dir_info(here::here("prac7_data", 
-                                 "statistical-gis-boundaries-london", 
+Londonwards<-fs::dir_info(here::here("statistical-gis-boundaries-london copy", 
                                  "ESRI"))%>%
   #$ means exact match
   dplyr::filter(str_detect(path, 
@@ -70,7 +69,7 @@ LondonWardProfiles <- read_csv("https://data.london.gov.uk/download/ward-profile
                                locale = locale(encoding = 'Latin1'), 
                                col_names = TRUE)
 
-LondonWardProfiles2 <- read_csv("/Users/caiqinke/Desktop/GEOG0114-Assignment/London-wards-wellbeing-2011.csv",na = c("", "NA", "n/a"), locale = locale(encoding = 'Latin1'), col_names = TRUE ) %>%
+LondonWardProfiles2 <- read_csv(here::here("London-wards-wellbeing-2011.csv"),na = c("", "NA", "n/a"), locale = locale(encoding = 'Latin1'), col_names = TRUE ) %>%
   clean_names() %>%
   dplyr::select(new_ward_code, gcse_point_scores_2011, public_transport_accessibility_2011)
 ```
@@ -93,7 +92,7 @@ Datatypelist
 
 ```{r}
 # Use read_sf() function to load shape file 
-BOROUGHshp <- read_sf("/Users/caiqinke/Desktop/GEOG0114/Week9/Week 9 - Dataset/London Borough Areas.shp")
+BOROUGHshp <- read_sf(here::here("Week 9 - Dataset copy/London Borough Areas.shp"))
 ```
 
 ```{r}
@@ -162,19 +161,11 @@ Regressiondata<- spatial_wards%>%
   clean_names()%>%
   dplyr::select(percent_travel_by_bicycle_to_work_2011, gcse_point_scores_2011, public_transport_accessibility_2011, median_household_income_estimate_2012_13) %>%
   dplyr::rename(., median_household_income_estimate = median_household_income_estimate_2012_13) 
-
-#now model
-modelMLR <- Regressiondata %>%
-  lm(log(percent_travel_by_bicycle_to_work_2011) ~ log(gcse_point_scores_2011)+log(public_transport_accessibility_2011)+log(median_household_income_estimate),
-     data=.)
-
-summary(modelMLR)
 ```
 
 ```{r}
 library(cowplot)
 ```
-
 
 ```{r}
 a <- ggplot(Regressiondata, aes(x = percent_travel_by_bicycle_to_work_2011)) + 
@@ -216,6 +207,15 @@ h <- ggplot(Regressiondata, aes(x = log_median_household_income_estimate)) +
 
 plot_grid(e,f,g,h, nrow = 2)
 
+```
+
+```{r}
+#now model
+modelMLR <- Regressiondata %>%
+  lm(log(percent_travel_by_bicycle_to_work_2011) ~ log(gcse_point_scores_2011)+log(public_transport_accessibility_2011)+log(median_household_income_estimate),
+     data=.)
+
+summary(modelMLR)
 ```
 
 ```{r}
